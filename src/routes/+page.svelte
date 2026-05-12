@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getTodayEntries, addEntry, removeEntry, getRecentDays } from '$lib/storage';
+	import { getTodayEntries, addEntry, removeEntry, getRecentDays, getSavedGoal } from '$lib/storage';
 	import { lookupUPC } from '$lib/openfoodfacts';
 	import type { FoodEntry, NutritionResult } from '$lib/types';
+	import GoalModal from '$lib/GoalModal.svelte';
 
 	// ── State ──────────────────────────────────────────────────────────────────
 	let entries = $state<FoodEntry[]>([]);
@@ -32,16 +33,19 @@
 	let manualCarbs = $state('');
 	let manualFiber = $state('');
 
+	let goal = $state(2000);
+	let showGoalModal = $state(false);
+
 	// ── Derived ───────────────────────────────────────────────────────────────
 	const todayTotal = $derived(entries.reduce((sum, e) => sum + e.calories, 0));
-	const GOAL = 2000;
-	const goalPct = $derived(Math.min((todayTotal / GOAL) * 100, 100));
-	const chartMax = $derived(Math.max(...recentDays.map((d) => d.total), GOAL, 100));
+	const goalPct = $derived(Math.min((todayTotal / goal) * 100, 100));
+	const chartMax = $derived(Math.max(...recentDays.map((d) => d.total), goal, 100));
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	onMount(() => {
 		entries = getTodayEntries();
 		recentDays = getRecentDays(7);
+		goal = getSavedGoal().dailyGoal;
 	});
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
@@ -213,7 +217,10 @@
 
 	<!-- ── Header ─────────────────────────────────────────────────────────── -->
 	<header class="text-center space-y-1">
-		<h1 class="text-2xl font-semibold tracking-tight text-gray-900">KillaCal</h1>
+		<div class="flex items-center justify-center gap-2.5">
+			<img src="/logo_64.webp" alt="Biteful logo" width="36" height="36" class="rounded-xl" />
+			<h1 class="text-2xl font-semibold tracking-tight text-gray-900 font-display">Biteful</h1>
+		</div>
 		<p class="text-sm text-gray-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
 	</header>
 
@@ -221,21 +228,28 @@
 	<section class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-4">
 		<div class="flex items-end justify-between">
 			<div>
-				<p class="text-xs font-medium uppercase tracking-widest text-gray-400">Today</p>
-				<p class="text-5xl font-semibold tabular-nums text-gray-900 mt-1">
+				<p class="text-xs font-medium uppercase tracking-widest text-gray-400 font-display">Today</p>
+				<p class="text-5xl font-semibold tabular-nums text-gray-900 mt-1 font-display">
 					{todayTotal.toLocaleString()}
 					<span class="text-lg font-normal text-gray-400">cal</span>
 				</p>
 			</div>
-			<p class="text-sm text-gray-400 pb-1">{GOAL.toLocaleString()} goal</p>
+			<button
+					onclick={() => showGoalModal = true}
+					class="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 pb-1 transition-colors group"
+					title="Edit goal"
+				>
+					{goal.toLocaleString()} goal
+					<svg class="w-3 h-3 opacity-40 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487a2.1 2.1 0 112.97 2.97L8.19 19.1a4 4 0 01-1.65.998l-2.675.669.669-2.675a4 4 0 01.998-1.65L16.862 4.487z"/></svg>
+				</button>
 		</div>
 		<!-- Progress bar -->
 		<div class="h-2 bg-gray-100 rounded-full overflow-hidden">
 			<div
 				class="h-full rounded-full transition-all duration-500"
-				class:bg-green-500={todayTotal <= GOAL}
-				class:bg-amber-400={todayTotal > GOAL && todayTotal <= GOAL * 1.15}
-				class:bg-red-400={todayTotal > GOAL * 1.15}
+				class:bg-green-500={todayTotal <= goal}
+				class:bg-amber-400={todayTotal > goal && todayTotal <= goal * 1.15}
+				class:bg-red-400={todayTotal > goal * 1.15}
 				style="width: {goalPct}%"
 			></div>
 		</div>
@@ -243,7 +257,7 @@
 
 	<!-- ── 7-day chart ────────────────────────────────────────────────────── -->
 	<section class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-		<p class="text-xs font-medium uppercase tracking-widest text-gray-400 mb-4">Last 7 days</p>
+		<p class="text-xs font-medium uppercase tracking-widest text-gray-400 mb-4 font-display">Last 7 days</p>
 		<div class="flex items-end gap-2 h-20">
 			{#each recentDays as day}
 				{@const barPct = chartMax > 0 ? (day.total / chartMax) * 100 : 0}
@@ -261,7 +275,7 @@
 				</div>
 			{/each}
 		</div>
-		<p class="text-[10px] text-gray-300 mt-1 text-right">goal: {GOAL.toLocaleString()} cal</p>
+		<p class="text-[10px] text-gray-300 mt-1 text-right">goal: {goal.toLocaleString()} cal</p>
 	</section>
 
 	<!-- ── Entry tabs ─────────────────────────────────────────────────────── -->
@@ -271,10 +285,10 @@
 			{#each (['ai', 'scan', 'manual'] as const) as tab}
 				<button
 					onclick={() => { activeTab = tab; stopScanner(); }}
-					class="py-3 text-sm font-medium transition-colors"
-					class:text-green-600={activeTab === tab}
+					class="py-3 text-sm font-medium transition-colors font-display"
+					class:text-brand={activeTab === tab}
 					class:border-b-2={activeTab === tab}
-					class:border-green-500={activeTab === tab}
+					class:border-brand={activeTab === tab}
 					class:text-gray-400={activeTab !== tab}
 				>
 					{tab === 'ai' ? '✦ AI' : tab === 'scan' ? '⊡ Scan' : '+ Manual'}
@@ -289,7 +303,7 @@
 					bind:value={aiText}
 					placeholder="Describe what you ate — e.g. 'two scrambled eggs and toast with butter'"
 					rows={3}
-					class="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-green-400 placeholder-gray-300"
+					class="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-brand placeholder-gray-300"
 				></textarea>
 
 				{#if aiError}
@@ -309,7 +323,7 @@
 							<p class="text-[11px] text-gray-400 italic">{aiPreview.notes}</p>
 						{/if}
 						<div class="flex gap-2 pt-1">
-							<button onclick={confirmAi} class="flex-1 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg py-2 transition-colors">
+							<button onclick={confirmAi} class="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg py-2 transition-colors">
 								Add to log
 							</button>
 							<button onclick={() => { aiPreview = null; }} class="px-4 text-sm text-gray-400 hover:text-gray-600 transition-colors">
@@ -323,7 +337,7 @@
 					<button
 						onclick={handleAiEstimate}
 						disabled={aiLoading || !aiText.trim()}
-						class="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-100 disabled:text-gray-300 text-white text-sm font-medium rounded-xl py-3 transition-colors flex items-center justify-center gap-2"
+						class="w-full bg-brand hover:bg-brand-dark disabled:bg-gray-100 disabled:text-gray-300 text-white text-sm font-medium rounded-xl py-3 transition-colors flex items-center justify-center gap-2"
 					>
 						{#if aiLoading}
 							<svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -344,7 +358,7 @@
 				{#if !scannerActive && !scanPreview && !showLabelCapture}
 					<button
 						onclick={startScanner}
-						class="w-full bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-xl py-3 transition-colors"
+						class="w-full bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-xl py-3 transition-colors"
 					>
 						Start camera scan
 					</button>
@@ -405,7 +419,7 @@
 							<p class="text-[11px] text-gray-400 italic">{scanPreview.notes}</p>
 						{/if}
 						<div class="flex gap-2 pt-1">
-							<button onclick={confirmScan} class="flex-1 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg py-2 transition-colors">
+							<button onclick={confirmScan} class="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg py-2 transition-colors">
 								Add to log
 							</button>
 							<button onclick={() => { scanPreview = null; }} class="px-4 text-sm text-gray-400 hover:text-gray-600 transition-colors">
@@ -423,24 +437,24 @@
 					bind:value={manualDescription}
 					type="text"
 					placeholder="Description"
-					class="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-400 placeholder-gray-300"
+					class="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand placeholder-gray-300"
 				/>
 				<input
 					bind:value={manualCalories}
 					type="number"
 					placeholder="Calories *"
 					min="0"
-					class="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-400 placeholder-gray-300"
+					class="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand placeholder-gray-300"
 				/>
 				<div class="grid grid-cols-3 gap-2">
-					<input bind:value={manualProtein} type="number" placeholder="Protein (g)" min="0" class="text-sm rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-400 placeholder-gray-300 w-full" />
-					<input bind:value={manualFat} type="number" placeholder="Fat (g)" min="0" class="text-sm rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-400 placeholder-gray-300 w-full" />
-					<input bind:value={manualCarbs} type="number" placeholder="Carbs (g)" min="0" class="text-sm rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-400 placeholder-gray-300 w-full" />
+					<input bind:value={manualProtein} type="number" placeholder="Protein (g)" min="0" class="text-sm rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand placeholder-gray-300 w-full" />
+					<input bind:value={manualFat} type="number" placeholder="Fat (g)" min="0" class="text-sm rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand placeholder-gray-300 w-full" />
+					<input bind:value={manualCarbs} type="number" placeholder="Carbs (g)" min="0" class="text-sm rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand placeholder-gray-300 w-full" />
 				</div>
 				<button
 					onclick={handleManualAdd}
 					disabled={!manualDescription.trim() || !manualCalories}
-					class="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-100 disabled:text-gray-300 text-white text-sm font-medium rounded-xl py-3 transition-colors"
+					class="w-full bg-brand hover:bg-brand-dark disabled:bg-gray-100 disabled:text-gray-300 text-white text-sm font-medium rounded-xl py-3 transition-colors"
 				>
 					Add to log
 				</button>
@@ -451,7 +465,7 @@
 	<!-- ── Today's entries ────────────────────────────────────────────────── -->
 	{#if entries.length > 0}
 		<section class="space-y-2">
-			<p class="text-xs font-medium uppercase tracking-widest text-gray-400 px-1">Today's log</p>
+			<p class="text-xs font-medium uppercase tracking-widest text-gray-400 px-1 font-display">Today's log</p>
 			{#each [...entries].reverse() as entry (entry.id)}
 				<div class="bg-white rounded-xl px-4 py-3 shadow-sm border border-gray-100 flex items-center gap-3">
 					<div class="flex-1 min-w-0">
@@ -477,3 +491,5 @@
 	{/if}
 
 </main>
+
+<GoalModal bind:open={showGoalModal} onSave={(g) => { goal = g; }} />

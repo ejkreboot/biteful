@@ -1,6 +1,36 @@
 import type { DailyLog, FoodEntry } from './types';
 
-const STORAGE_KEY = 'killacal_log';
+const STORAGE_KEY = 'biteful_log';
+const GOAL_KEY = 'biteful_goal';
+
+export type GoalInputs = {
+	sex: 'male' | 'female';
+	age: string;
+	heightFt: string;
+	heightIn: string;
+	weightLbs: string;
+	activity: string;
+	goalWeightLbs: string;
+	weeksToGoal: string;
+};
+
+export type GoalData = {
+	dailyGoal: number;
+	inputs?: GoalInputs;
+};
+
+export function getSavedGoal(): GoalData {
+	if (typeof localStorage === 'undefined') return { dailyGoal: 2000 };
+	try {
+		return JSON.parse(localStorage.getItem(GOAL_KEY) ?? '{"dailyGoal":2000}');
+	} catch {
+		return { dailyGoal: 2000 };
+	}
+}
+
+export function saveGoalData(data: GoalData): void {
+	localStorage.setItem(GOAL_KEY, JSON.stringify(data));
+}
 
 function getLog(): DailyLog {
 	if (typeof localStorage === 'undefined') return {};

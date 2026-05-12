@@ -1,7 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #16a34a;
-  --color-brand-light: #dcfce7;
-  --font-sans: 'Inter', system-ui, sans-serif;
+  --color-brand: #e0713a;
+  --color-brand-dark: #c4581f;
+  --color-brand-light: #fef4ee;
+  --color-brand-text: #9c3a10;
+  --font-body: 'Abhaya Libre', Georgia, serif;
+  --font-display: 'Elms Sans', system-ui, sans-serif;
 }
