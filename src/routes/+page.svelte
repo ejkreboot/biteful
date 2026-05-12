@@ -23,7 +23,8 @@
 	let showLabelCapture = $state(false);
 	let videoEl = $state<HTMLVideoElement | null>(null);
 	let scannerActive = $state(false);
-	let codeReader: import('@zxing/browser').BrowserMultiFormatReader | null = null;
+	let scanControls: { stop: () => void } | null = null;
+	let scanServings = $state(1);
 
 	// Manual tab
 	let manualDescription = $state('');
@@ -112,9 +113,9 @@
 		scannerActive = true;
 
 		const { BrowserMultiFormatReader } = await import('@zxing/browser');
-		codeReader = new BrowserMultiFormatReader();
+		const codeReader = new BrowserMultiFormatReader();
 		try {
-			await codeReader.decodeFromVideoDevice(undefined, videoEl!, async (result) => {
+			scanControls = await codeReader.decodeFromVideoDevice(undefined, videoEl!, async (result) => {
 				if (result) {
 					stopScanner();
 					await handleBarcode(result.getText());
@@ -127,8 +128,8 @@
 	}
 
 	function stopScanner() {
-		codeReader?.reset();
-		codeReader = null;
+		scanControls?.stop();
+		scanControls = null;
 		scannerActive = false;
 	}
 
@@ -151,9 +152,18 @@
 
 	function confirmScan() {
 		if (!scanPreview) return;
-		commitEntry(scanPreview, 'upc');
+		const s = scanServings > 0 ? scanServings : 1;
+		commitEntry({
+			...scanPreview,
+			calories: Math.round(scanPreview.calories * s),
+			protein_g: Math.round(scanPreview.protein_g * s * 10) / 10,
+			fat_g: Math.round(scanPreview.fat_g * s * 10) / 10,
+			carbs_g: Math.round(scanPreview.carbs_g * s * 10) / 10,
+			fiber_g: Math.round(scanPreview.fiber_g * s * 10) / 10
+		}, 'upc');
 		scanPreview = null;
 		showLabelCapture = false;
+		scanServings = 1;
 	}
 
 	async function handleLabelPhoto(event: Event) {
@@ -407,8 +417,10 @@
 
 				<!-- Scan result preview -->
 				{#if scanPreview}
+					{@const s = scanServings > 0 ? scanServings : 1}
 					<div class="rounded-xl bg-gray-50 border border-gray-100 p-4 space-y-2">
 						<p class="text-sm font-medium text-gray-800">{scanPreview.description}</p>
+						<p class="text-[11px] text-gray-400">Per serving</p>
 						<div class="flex gap-4 text-xs text-gray-500">
 							<span><b class="text-gray-800">{scanPreview.calories}</b> cal</span>
 							<span>{scanPreview.protein_g}g protein</span>
@@ -418,11 +430,23 @@
 						{#if scanPreview.notes}
 							<p class="text-[11px] text-gray-400 italic">{scanPreview.notes}</p>
 						{/if}
+						<div class="flex items-center gap-3 pt-1">
+							<label for="scan-servings" class="text-xs text-gray-500 whitespace-nowrap">Servings</label>
+							<input
+								id="scan-servings"
+								bind:value={scanServings}
+								type="number"
+								min="0.25"
+								step="0.25"
+								class="w-20 text-sm rounded-lg border border-gray-200 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand text-center"
+							/>
+							<span class="text-xs text-gray-400">= <b class="text-gray-700">{Math.round(scanPreview.calories * s)}</b> cal</span>
+						</div>
 						<div class="flex gap-2 pt-1">
 							<button onclick={confirmScan} class="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg py-2 transition-colors">
 								Add to log
 							</button>
-							<button onclick={() => { scanPreview = null; }} class="px-4 text-sm text-gray-400 hover:text-gray-600 transition-colors">
+							<button onclick={() => { scanPreview = null; scanServings = 1; }} class="px-4 text-sm text-gray-400 hover:text-gray-600 transition-colors">
 								Discard
 							</button>
 						</div>
