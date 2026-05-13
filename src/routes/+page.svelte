@@ -15,6 +15,7 @@
 	let aiLoading = $state(false);
 	let aiError = $state('');
 	let aiPreview = $state<NutritionResult | null>(null);
+	let aiServings = $state(1);
 
 	// Scan tab
 	let scanError = $state('');
@@ -100,9 +101,18 @@
 
 	function confirmAi() {
 		if (!aiPreview) return;
-		commitEntry(aiPreview, 'ai');
+		const s = aiServings > 0 ? aiServings : 1;
+		commitEntry({
+			...aiPreview,
+			calories: Math.round(aiPreview.calories * s),
+			protein_g: Math.round(aiPreview.protein_g * s * 10) / 10,
+			fat_g: Math.round(aiPreview.fat_g * s * 10) / 10,
+			carbs_g: Math.round(aiPreview.carbs_g * s * 10) / 10,
+			fiber_g: Math.round(aiPreview.fiber_g * s * 10) / 10
+		}, 'ai');
 		aiText = '';
 		aiPreview = null;
+		aiServings = 1;
 	}
 
 	// ── Scan tab ──────────────────────────────────────────────────────────────
@@ -321,25 +331,38 @@
 				{/if}
 
 				{#if aiPreview}
-					<div class="rounded-xl bg-gray-50 border border-gray-100 p-4 space-y-2">
-						<p class="text-sm font-medium text-gray-800">{aiPreview.description}</p>
-						<div class="flex gap-4 text-xs text-gray-500">
-							<span><b class="text-gray-800">{aiPreview.calories}</b> cal</span>
-							<span>{aiPreview.protein_g}g protein</span>
-							<span>{aiPreview.fat_g}g fat</span>
-							<span>{aiPreview.carbs_g}g carbs</span>
-						</div>
-						{#if aiPreview.notes}
-							<p class="text-[11px] text-gray-400 italic">{aiPreview.notes}</p>
-						{/if}
-						<div class="flex gap-2 pt-1">
-							<button onclick={confirmAi} class="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg py-2 transition-colors">
-								Add to log
-							</button>
-							<button onclick={() => { aiPreview = null; }} class="px-4 text-sm text-gray-400 hover:text-gray-600 transition-colors">
-								Discard
-							</button>
-						</div>
+				{@const s = aiServings > 0 ? aiServings : 1}
+				<div class="rounded-xl bg-gray-50 border border-gray-100 p-4 space-y-2">
+					<p class="text-sm font-medium text-gray-800">{aiPreview.description}</p>
+					<p class="text-[11px] text-gray-400">Per serving</p>
+					<div class="flex gap-4 text-xs text-gray-500">
+						<span><b class="text-gray-800">{aiPreview.calories}</b> cal</span>
+						<span>{aiPreview.protein_g}g protein</span>
+						<span>{aiPreview.fat_g}g fat</span>
+						<span>{aiPreview.carbs_g}g carbs</span>
+					</div>
+					{#if aiPreview.notes}
+						<p class="text-[11px] text-gray-400 italic">{aiPreview.notes}</p>
+					{/if}
+					<div class="flex items-center gap-3 pt-1">
+						<label for="ai-servings" class="text-xs text-gray-500 whitespace-nowrap">Servings</label>
+						<input
+							id="ai-servings"
+							bind:value={aiServings}
+							type="number"
+							min="0.25"
+							step="0.25"
+							class="w-20 text-sm rounded-lg border border-gray-200 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand text-center"
+						/>
+						<span class="text-xs text-gray-400">= <b class="text-gray-700">{Math.round(aiPreview.calories * s)}</b> cal</span>
+					</div>
+					<div class="flex gap-2 pt-1">
+						<button onclick={confirmAi} class="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg py-2 transition-colors">
+							Add to log
+						</button>
+						<button onclick={() => { aiPreview = null; aiServings = 1; }} class="px-4 text-sm text-gray-400 hover:text-gray-600 transition-colors">
+							Edit
+						</button>
 					</div>
 				{/if}
 
@@ -350,7 +373,7 @@
 						class="w-full bg-brand hover:bg-brand-dark disabled:bg-gray-100 disabled:text-gray-300 text-white text-sm font-medium rounded-xl py-3 transition-colors flex items-center justify-center gap-2"
 					>
 						{#if aiLoading}
-							<svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+							<svg class="animate-spin h-5 w-5" style="color: #6bcc3c" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
 								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
 							</svg>
