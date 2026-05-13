@@ -364,6 +364,7 @@
 							Edit
 						</button>
 					</div>
+				</div>
 				{/if}
 
 				{#if !aiPreview}
