@@ -1,7 +1,8 @@
-import type { DailyLog, FoodEntry } from './types';
+import type { DailyLog, FoodEntry, Favorite } from './types';
 
 const STORAGE_KEY = 'biteful_log';
 const GOAL_KEY = 'biteful_goal';
+const FAVORITES_KEY = 'biteful_favorites';
 
 export type GoalInputs = {
 	sex: 'male' | 'female';
@@ -68,6 +69,37 @@ export function removeEntry(id: string): void {
 	if (!log[key]) return;
 	log[key].entries = log[key].entries.filter((e) => e.id !== id);
 	saveLog(log);
+}
+
+export function getFavorites(): Favorite[] {
+	if (typeof localStorage === 'undefined') return [];
+	try {
+		return JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? '[]');
+	} catch {
+		return [];
+	}
+}
+
+export function addFavorite(entry: FoodEntry): void {
+	const favs = getFavorites();
+	if (favs.some((f) => f.description === entry.description)) return;
+	favs.unshift({
+		id: crypto.randomUUID(),
+		description: entry.description,
+		calories: entry.calories,
+		protein_g: entry.protein_g,
+		fat_g: entry.fat_g,
+		carbs_g: entry.carbs_g,
+		fiber_g: entry.fiber_g,
+		source: entry.source,
+		savedAt: Date.now()
+	});
+	localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+}
+
+export function removeFavoriteByDesc(description: string): void {
+	const favs = getFavorites().filter((f) => f.description !== description);
+	localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
 }
 
 export function getRecentDays(n: number): { date: string; total: number }[] {

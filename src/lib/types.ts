@@ -16,6 +16,18 @@ export type DailyLog = {
 	};
 };
 
+export type Favorite = {
+	id: string;
+	description: string;
+	calories: number;
+	protein_g: number;
+	fat_g: number;
+	carbs_g: number;
+	fiber_g: number;
+	source: FoodEntry['source'];
+	savedAt: number;
+};
+
 export type NutritionResult = {
 	description: string;
 	calories: number;

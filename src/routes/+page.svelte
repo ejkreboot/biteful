@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getTodayEntries, addEntry, removeEntry, getRecentDays, getSavedGoal } from '$lib/storage';
+	import { getTodayEntries, addEntry, removeEntry, getRecentDays, getSavedGoal, getFavorites, addFavorite, removeFavoriteByDesc } from '$lib/storage';
 	import { lookupUPC } from '$lib/openfoodfacts';
-	import type { FoodEntry, NutritionResult } from '$lib/types';
+	import type { FoodEntry, Favorite, NutritionResult } from '$lib/types';
 	import GoalModal from '$lib/GoalModal.svelte';
 
 	// ── State ──────────────────────────────────────────────────────────────────
 	let entries = $state<FoodEntry[]>([]);
 	let recentDays = $state<{ date: string; total: number }[]>([]);
-	let activeTab = $state<'ai' | 'scan' | 'manual'>('ai');
+	let activeTab = $state<'ai' | 'scan' | 'manual' | 'favorites'>('ai');
+	let favorites = $state<Favorite[]>([]);
 
 	// AI tab
 	let aiText = $state('');
@@ -48,6 +49,7 @@
 		entries = getTodayEntries();
 		recentDays = getRecentDays(7);
 		goal = getSavedGoal().dailyGoal;
+		favorites = getFavorites();
 	});
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
@@ -72,6 +74,31 @@
 		removeEntry(id);
 		entries = getTodayEntries();
 		recentDays = getRecentDays(7);
+	}
+
+	function toggleFavorite(entry: FoodEntry) {
+		if (favorites.some((f) => f.description === entry.description)) {
+			removeFavoriteByDesc(entry.description);
+		} else {
+			addFavorite(entry);
+		}
+		favorites = getFavorites();
+	}
+
+	function logFavorite(fav: Favorite) {
+		commitEntry({
+			description: fav.description,
+			calories: fav.calories,
+			protein_g: fav.protein_g,
+			fat_g: fav.fat_g,
+			carbs_g: fav.carbs_g,
+			fiber_g: fav.fiber_g
+		}, fav.source);
+	}
+
+	function unfavorite(fav: Favorite) {
+		removeFavoriteByDesc(fav.description);
+		favorites = getFavorites();
 	}
 
 	function isToday(dateStr: string) {
@@ -301,17 +328,20 @@
 	<!-- ── Entry tabs ─────────────────────────────────────────────────────── -->
 	<section class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
 		<!-- Tab bar -->
-		<div class="grid grid-cols-3 border-b border-gray-100">
-			{#each (['ai', 'scan', 'manual'] as const) as tab}
+		<div class="grid grid-cols-4 border-b border-gray-100">
+			{#each (['ai', 'scan', 'manual', 'favorites'] as const) as tab}
 				<button
 					onclick={() => { activeTab = tab; stopScanner(); }}
-					class="py-3 text-sm font-medium transition-colors font-display"
+					class="py-3 text-sm font-medium transition-colors font-display relative"
 					class:text-brand={activeTab === tab}
 					class:border-b-2={activeTab === tab}
 					class:border-brand={activeTab === tab}
 					class:text-gray-400={activeTab !== tab}
 				>
-					{tab === 'ai' ? '✦ AI' : tab === 'scan' ? '⊡ Scan' : '+ Manual'}
+					{tab === 'ai' ? '✦ AI' : tab === 'scan' ? '⊡ Scan' : tab === 'manual' ? '+ Manual' : '★ Saved'}
+					{#if tab === 'favorites' && favorites.length > 0}
+						<span class="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-brand"></span>
+					{/if}
 				</button>
 			{/each}
 		</div>
@@ -507,6 +537,36 @@
 					Add to log
 				</button>
 			</div>
+
+		<!-- ── Saved panel ────────────────────────────────────────────── -->
+		{:else if activeTab === 'favorites'}
+			<div class="p-5">
+				{#if favorites.length === 0}
+					<p class="text-sm text-gray-400 text-center py-6">No saved items yet.<br/>Tap ☆ on any log entry to save it.</p>
+				{:else}
+					<ul class="space-y-2">
+						{#each favorites as fav (fav.id)}
+							<li class="flex items-center gap-3 rounded-xl bg-gray-50 border border-gray-100 px-4 py-3">
+								<div class="flex-1 min-w-0">
+									<p class="text-sm font-medium text-gray-800 truncate">{fav.description}</p>
+									<p class="text-xs text-gray-400 mt-0.5">{fav.calories} cal
+										{#if fav.protein_g > 0}· {fav.protein_g}g protein{/if}
+									</p>
+								</div>
+								<button
+									onclick={() => logFavorite(fav)}
+									class="shrink-0 bg-brand hover:bg-brand-dark text-white text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
+								>Add</button>
+								<button
+									onclick={() => unfavorite(fav)}
+									class="shrink-0 text-brand hover:text-gray-400 transition-colors text-base leading-none"
+									aria-label="Remove from saved"
+								>★</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
 		{/if}
 	</section>
 
@@ -527,6 +587,13 @@
 					</div>
 					<div class="flex items-center gap-2 shrink-0">
 						<span class="text-[10px] uppercase tracking-wide text-gray-300">{entry.source}</span>
+						<button
+							onclick={() => toggleFavorite(entry)}
+							class="transition-colors text-base leading-none"
+							class:text-brand={favorites.some(f => f.description === entry.description)}
+							class:text-gray-200={!favorites.some(f => f.description === entry.description)}
+							aria-label="Save to favorites"
+						>{favorites.some(f => f.description === entry.description) ? '★' : '☆'}</button>
 						<button
 							onclick={() => handleRemove(entry.id)}
 							class="text-gray-200 hover:text-red-400 transition-colors text-lg leading-none"
