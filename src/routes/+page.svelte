@@ -7,12 +7,15 @@
 
 	// ── State ──────────────────────────────────────────────────────────────────
 	let entries = $state<FoodEntry[]>([]);
-	let recentDays = $state<{ date: string; total: number }[]>([]);
+	let recentDays = $state<{ date: string; total: number; protein_g: number; fat_g: number; carbs_g: number }[]>([]);
 	let activeTab = $state<'ai' | 'scan' | 'manual' | 'favorites'>('ai');
 	let favorites = $state<Favorite[]>([]);
 
 	// AI tab
+	let aiMode = $state<'text' | 'photo'>('text');
 	let aiText = $state('');
+	let aiPhotoFile = $state<File | null>(null);
+	let aiPhotoPreviewUrl = $state('');
 	let aiLoading = $state(false);
 	let aiError = $state('');
 	let aiPreview = $state<NutritionResult | null>(null);
@@ -106,16 +109,32 @@
 	}
 
 	// ── AI tab ────────────────────────────────────────────────────────────────
+	function handleAiPhotoSelect(event: Event) {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		aiPhotoFile = file;
+		if (aiPhotoPreviewUrl) URL.revokeObjectURL(aiPhotoPreviewUrl);
+		aiPhotoPreviewUrl = URL.createObjectURL(file);
+	}
+
 	async function handleAiEstimate() {
-		if (!aiText.trim()) return;
 		aiLoading = true;
 		aiError = '';
 		aiPreview = null;
 		try {
+			let body: Record<string, string>;
+			if (aiMode === 'photo' && aiPhotoFile) {
+				const base64 = await fileToBase64(aiPhotoFile);
+				body = { imageBase64: base64, mediaType: aiPhotoFile.type };
+			} else {
+				if (!aiText.trim()) return;
+				body = { description: aiText };
+			}
 			const res = await fetch('/api/calories', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ description: aiText })
+				body: JSON.stringify(body)
 			});
 			if (!res.ok) throw new Error(await res.text());
 			aiPreview = await res.json();
@@ -138,6 +157,8 @@
 			fiber_g: Math.round(aiPreview.fiber_g * s * 10) / 10
 		}, 'ai');
 		aiText = '';
+		aiPhotoFile = null;
+		if (aiPhotoPreviewUrl) { URL.revokeObjectURL(aiPhotoPreviewUrl); aiPhotoPreviewUrl = ''; }
 		aiPreview = null;
 		aiServings = 1;
 	}
@@ -307,20 +328,43 @@
 		<p class="text-xs font-medium uppercase tracking-widest text-gray-400 mb-4 font-display">Last 7 days</p>
 		<div class="flex items-end gap-2 h-20">
 			{#each recentDays as day}
-				{@const barPct = chartMax > 0 ? (day.total / chartMax) * 100 : 0}
-				{@const today = isToday(day.date)}
+				{@const barPct    = chartMax > 0 ? (day.total / chartMax) * 100 : 0}
+				{@const today     = isToday(day.date)}
+				{@const pKcal     = day.protein_g * 4}
+				{@const cKcal     = day.carbs_g   * 4}
+				{@const hasMacros = (pKcal + cKcal) > 0 && day.total > 0}
+				{@const pPct      = hasMacros ? Math.min((pKcal / day.total) * 100, 100)          : 0}
+				{@const cPct      = hasMacros ? Math.min((cKcal / day.total) * 100, 100 - pPct)   : 0}
+				{@const fPct      = hasMacros ? Math.max(100 - pPct - cPct, 0)                    : 100}
+				{@const tip       = hasMacros
+					? `${day.date}\n${day.total} cal\nProtein ${Math.round(day.protein_g)}g  Carbs ${Math.round(day.carbs_g)}g  Fat ${Math.round(day.fat_g)}g`
+					: day.total > 0 ? `${day.date}: ${day.total} cal` : day.date}
 				<div class="flex-1 flex flex-col items-center gap-1 h-full justify-end">
 					<div
-						class="w-full rounded-t transition-all duration-500"
-						class:bg-green-500={today}
-						class:bg-gray-200={!today && day.total > 0}
-						class:bg-gray-100={!today && day.total === 0}
+						class="w-full rounded-t overflow-hidden flex flex-col transition-all duration-500"
 						style="height: {Math.max(barPct, day.total > 0 ? 4 : 0)}%"
-						title="{day.date}: {day.total} cal"
-					></div>
+						title={tip}
+					>
+						{#if !hasMacros}
+							<div class="w-full h-full"
+								class:bg-green-500={today}
+								class:bg-gray-200={!today && day.total > 0}
+								class:bg-gray-100={day.total === 0}
+							></div>
+						{:else}
+							<div class="w-full shrink-0" class:bg-sky-400={today} class:bg-sky-200={!today}   style="height:{pPct}%"></div>
+							<div class="w-full shrink-0" class:bg-gray-300={today} class:bg-gray-200={!today} style="height:{fPct}%"></div>
+							<div class="w-full shrink-0" class:bg-amber-300={today} class:bg-amber-200={!today} style="height:{cPct}%"></div>
+						{/if}
+					</div>
 					<span class="text-[10px] text-gray-400">{new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}</span>
 				</div>
 			{/each}
+		</div>
+		<div class="flex items-center justify-center gap-4 mt-3">
+			<span class="flex items-center gap-1.5 text-[10px] text-gray-400"><span class="w-2 h-2 rounded-full bg-sky-300 inline-block"></span>Protein</span>
+			<span class="flex items-center gap-1.5 text-[10px] text-gray-400"><span class="w-2 h-2 rounded-full bg-amber-200 inline-block"></span>Carbs</span>
+			<span class="flex items-center gap-1.5 text-[10px] text-gray-400"><span class="w-2 h-2 rounded-full bg-gray-300 inline-block"></span>Fat</span>
 		</div>
 		<p class="text-[10px] text-gray-300 mt-1 text-right">goal: {goal.toLocaleString()} cal</p>
 	</section>
@@ -349,12 +393,44 @@
 		<!-- ── AI panel ───────────────────────────────────────────────── -->
 		{#if activeTab === 'ai'}
 			<div class="p-5 space-y-3">
-				<textarea
-					bind:value={aiText}
-					placeholder="Describe what you ate — e.g. 'two scrambled eggs and toast with butter'"
-					rows={3}
-					class="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-brand placeholder-gray-300"
-				></textarea>
+				<!-- mode toggle -->
+				<div class="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-medium">
+					<button
+						onclick={() => { aiMode = 'text'; aiPhotoFile = null; if (aiPhotoPreviewUrl) { URL.revokeObjectURL(aiPhotoPreviewUrl); aiPhotoPreviewUrl = ''; } aiPreview = null; aiError = ''; }}
+						class="flex-1 py-2 transition-colors {aiMode === 'text' ? 'bg-brand text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}"
+					>
+						Describe
+					</button>
+					<button
+						onclick={() => { aiMode = 'photo'; aiText = ''; aiPreview = null; aiError = ''; }}
+						class="flex-1 py-2 transition-colors {aiMode === 'photo' ? 'bg-brand text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}"
+					>
+						Photo
+					</button>
+				</div>
+
+				{#if aiMode === 'text'}
+					<textarea
+						bind:value={aiText}
+						placeholder="Describe what you ate — e.g. 'two scrambled eggs and toast with butter'"
+						rows={3}
+						class="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-brand placeholder-gray-300"
+					></textarea>
+				{:else}
+					<label class="flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed border-gray-200 cursor-pointer hover:border-brand transition-colors overflow-hidden {aiPhotoPreviewUrl ? 'p-0' : 'p-6'}">
+						{#if aiPhotoPreviewUrl}
+							<img src={aiPhotoPreviewUrl} alt="Food photo preview" class="w-full max-h-56 object-cover" />
+							<span class="text-xs text-gray-400 py-2">Tap to change photo</span>
+						{:else}
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+							</svg>
+							<span class="text-sm text-gray-400">Tap to add a photo of your food</span>
+						{/if}
+						<input type="file" accept="image/*" class="hidden" onchange={handleAiPhotoSelect} />
+					</label>
+				{/if}
 
 				{#if aiError}
 					<p class="text-xs text-red-500">{aiError}</p>
@@ -400,7 +476,7 @@
 				{#if !aiPreview}
 					<button
 						onclick={handleAiEstimate}
-						disabled={aiLoading || !aiText.trim()}
+						disabled={aiLoading || (aiMode === 'text' ? !aiText.trim() : !aiPhotoFile)}
 						class="w-full bg-brand hover:bg-brand-dark disabled:bg-gray-100 disabled:text-gray-300 text-white text-sm font-medium rounded-xl py-3 transition-colors flex items-center justify-center gap-2"
 					>
 						{#if aiLoading}

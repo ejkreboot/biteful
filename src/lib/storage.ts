@@ -102,17 +102,20 @@ export function removeFavoriteByDesc(description: string): void {
 	localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
 }
 
-export function getRecentDays(n: number): { date: string; total: number }[] {
+export function getRecentDays(n: number): { date: string; total: number; protein_g: number; fat_g: number; carbs_g: number }[] {
 	const log = getLog();
-	const results: { date: string; total: number }[] = [];
+	const results: { date: string; total: number; protein_g: number; fat_g: number; carbs_g: number }[] = [];
 	for (let i = n - 1; i >= 0; i--) {
 		const d = new Date();
 		d.setDate(d.getDate() - i);
 		const key = dateKey(d);
 		const entries = log[key]?.entries ?? [];
 		results.push({
-			date: key,
-			total: entries.reduce((sum, e) => sum + e.calories, 0)
+			date:      key,
+			total:     entries.reduce((sum, e) => sum + e.calories,          0),
+			protein_g: entries.reduce((sum, e) => sum + (e.protein_g ?? 0),  0),
+			fat_g:     entries.reduce((sum, e) => sum + (e.fat_g     ?? 0),  0),
+			carbs_g:   entries.reduce((sum, e) => sum + (e.carbs_g   ?? 0),  0),
 		});
 	}
 	return results;
